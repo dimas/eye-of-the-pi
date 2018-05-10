@@ -50,6 +50,8 @@ data in really efficient `numpy.ndarray` instead (where the same operation is fa
 
 ## Links
 * [The project on Adafruit](https://learn.adafruit.com/animated-snake-eyes-bonnet-for-raspberry-pi?view=all)
+* [Adafruit SSD1351 Python library](https://github.com/twchad/Adafruit_Python_SSD1351)
 * [Adafruit's board](https://www.adafruit.com/product/3356). I did not have it but it shows nice video how these eyes should operate
 * [SSD1351 datasheet](https://cdn-shop.adafruit.com/datasheets/SSD1351-Revision+1.3.pdf)
 * [Luma.OLED](https://luma-oled.readthedocs.io/en/latest/hardware.html) - I haven't used it though
+

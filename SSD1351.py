@@ -107,7 +107,7 @@ class SSD1351:
         self.height = 128
 
         # RGB buffer ([x, y, component])
-        self.nd3frame = np.ndarray((self.width, self.height, 3), dtype=np.uint8)
+        self.frame = np.ndarray((self.width, self.height, 3), dtype=np.uint8)
 
         GPIO.setmode(GPIO.BCM)
         self.dc = 24
@@ -139,14 +139,28 @@ class SSD1351:
         # There is /sys/module/spidev/parameters/bufsiz which you can increase to allow bigger chunks
         # so I wanter to read it here and use buffer of that size.
         # But spidev library does not support anything but 4K really
-        # See https://github.com/doceme/py-spidev/blob/master/spidev_module.c#L261
+        # See https://github.com/doceme/py-spidev/issues/62
         return 4096
 
+    # data must be a list
     def bulkdata(self, data):
         self.set_dc(True)
         chunk_size = self.get_spi_bufsize()
         for i in range(0, len(data), chunk_size):
             chunk = data[i:i + chunk_size]
+            self.spi.xfer(chunk)
+
+    # data must be a numpy.ndarray (we call tolist() for each chunk)
+    def data_ndarray(self, data):
+        self.set_dc(True)
+        chunk_size = self.get_spi_bufsize()
+        # It is slightly more efficient to slice numpy array into chunks and then call tolist() on each
+        # instead of converting the entire array tolist() and then cutting the list into chunks.
+        # Either way, the tolist() thing is very expensive really. Would be better if numpy.array
+        # implemented sequence protocol which spidev.xfer expects
+        # But alas, https://github.com/numpy/numpy/issues/7315
+        for i in range(0, len(data), chunk_size):
+            chunk = data[i:i + chunk_size].tolist()
             self.spi.xfer(chunk)
 
     def reset(self):
@@ -231,19 +245,20 @@ class SSD1351:
     # Fill the entire framebuffer with the same color.
     # Only usefull for testing really.
     def fill(self, r, g, b):
-      self.nd3frame[:,:] = [r, g, b]
+      self.frame[:,:] = [r, g, b]
 
     # Flush framebuffer to the device
     def flush(self):
-        raw = self.nd3frame.flatten() >> 2
+        raw = self.frame.flatten() >> 2
         self.command(CMD_WRITE_RAM)
-        self.bulkdata(raw.tolist())
+        self.data_ndarray(raw)
 
     # Copy rectangle from the passed image into the screen frame buffer
-    # The image is represented with RGB array ( numpy.ndarray((width, height, 3)) )
-    #   dstx, dsty - location on the destination (OLED frame frame buffer) where to copy
+    # The image is represented with RGB array - numpy.ndarray((width, height, 3))
+    #   dstx, dsty - location in the destination (OLED frame buffer) where to copy
     #   srcx, srcy - location in the source image (img) where to copy from
     #   w, h       - width and height of the rectangle to copy
+    # This method crops image being copied to a rectange that is valid for both source and destination.
     def copy_image(self, img, dstx = 0, dsty = 0, srcx = 0, srcy = 0, w = None, h = None):
 
         # 90% of this method is just validation of input and cropping the area to copy
@@ -298,8 +313,8 @@ class SSD1351:
         if w <= 0 or h <= 0:
             return
 
-        print("(%d, %d) x (%d %d) => (%d, %d); src(%d, %d), dst(%d, %d)" % (srcx, srcy, w, h, dstx, dsty, srcw, srch, dstw, dsth))
+        # print("(%d, %d) x (%d %d) => (%d, %d); src(%d, %d), dst(%d, %d)" % (srcx, srcy, w, h, dstx, dsty, srcw, srch, dstw, dsth))
 
-        self.nd3frame[dstx:dstx+w, dsty:dsty+h] = img[srcx:srcx+w, srcy:srcy+h]
+        self.frame[dstx:dstx+w, dsty:dsty+h] = img[srcx:srcx+w, srcy:srcy+h]
 
 
