@@ -38,6 +38,10 @@ At the moment, I am playing with just a single display which is connected the fo
 | DC             | 18 GPIO 24     |
 | CS             | 24 CE0 (SPI)   |
 
+The image below is from [OLED Display Library Setup for the Raspberry Pi featuring SSD1331](https://www.bluetin.io/displays/oled-display-raspberry-pi-ssd1331/).
+It shows Pi Zero but I used exactly the same pins for my regular Pi 3.
+![OLED Display Library Setup for the Raspberry Pi featuring SSD1331](docs/images/ssd1331-oled-display-raspberry-pi-connection.jpg)
+
 ## Notes
 
 The choice of the format for the framebuffer was driven by two things:
@@ -54,4 +58,6 @@ data in really efficient `numpy.ndarray` instead (where the same operation is fa
 * [Adafruit's board](https://www.adafruit.com/product/3356). I did not have it but it shows nice video how these eyes should operate
 * [SSD1351 datasheet](https://cdn-shop.adafruit.com/datasheets/SSD1351-Revision+1.3.pdf)
 * [Luma.OLED](https://luma-oled.readthedocs.io/en/latest/hardware.html) - I haven't used it though
+* [OLED Display Library Setup for the Raspberry Pi featuring SSD1331](https://www.bluetin.io/displays/oled-display-raspberry-pi-ssd1331/)
+
 
