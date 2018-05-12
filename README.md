@@ -1,6 +1,6 @@
 # Eye of the Pi
 
-This project started because I wanted to make [this thing](https://learn.adafruit.com/animated-snake-eyes-bonnet-for-raspberry-pi) I saw on Adafruit.
+This project started because I wanted to make [https://learn.adafruit.com/animated-snake-eyes-bonnet-for-raspberry-pi](this thing) I saw on Adafruit.
 
 The project described there works the following way - a Python application draws these eyes using OpenGL (pi3d) on your normal screen and then there is a C program (`fbx2`)
 that continuously copies image from the screen framebuffer to the displays connected over SPI.
@@ -8,22 +8,34 @@ that continuously copies image from the screen framebuffer to the displays conne
 I did not have Adafruit's board, my cheap displays from Aliexpress were slightly different and I could not make the whole thing work despite the effort.
 So I decided to do it in an alternative way and use the opportunity to do it in Python only, no `fbx2`.
 
-It was most interesting to me to make low-level display stuff to work so I guess I missed lots of ready-to-use libraries like [Luma.OLED](https://luma-oled.readthedocs.io/en/latest/hardware.html)
+It was most interesting to me to play with the low-level display stuff (reading datasheet and playing with commands) so I guess I missed lots of ready-to-use libraries
+like [Luma.OLED](https://luma-oled.readthedocs.io/en/latest/hardware.html)
+
+The Python code in [Original Adafruit Pi_Eyes sources](https://github.com/adafruit/Pi_Eyes/) I found difficult to follow and modify because
+it was a bit monolithic - everything was done in one huge `frame` method and there were lots of globals.
+
+So I refactored it to be a bit more OOP-ish and introduced a clear separation between rendering code (the `Eye` class that draws the eye in a certain state using pi3d)
+and animation code (that controls eye state based on time or GPIO input).
+The hope is that two-eye version (when I start working on it) will also benefit a lot from that `Eye` class it as lots of copy&paste can be removed from `eyes.py`.
 
 ## How to use
+It is still work in progress really...
 
-Well, you probably cannot.
-
-The current state of things is that I have `SSD1351.py` - the "driver" for the SSD1351 display that initialises it (when connected the right way because all pins are hard-coded)
+So what there is currently:
+* `SSD1351.py` - the "driver" for the SSD1351 display that initialises it (when connected the right way because all pins are hard-coded)
 and allows flushing the internal framebuffer to the OLED. It also has couple of methods - one to fill the entire framebuffer with a single colour
-and another - to copy a different image into the framebuffer.
-
-`test.py` is just a very simple test to check the display and its driver work - it contiuously fills the display with red, then gren, then blue and prints
+and another - to copy an image into the framebuffer.
+* `test.py` is just a very simple test to check the display and its driver work - it contiuously fills the display with red, then gren, then blue in a loop and prints
 how many times per second it can flush the framebuffer (the fps).
+* `eye.py` - the Eye class with eye-rendering logic extracted from `cyclop.py`
+* Then there are files from the [Original Adafruit Pi_Eyes sources](https://github.com/adafruit/Pi_Eyes/):
+** `cyclop.py` - that has been refactored. The animation logic still remains the this file (although moved to `Animator` class) while eye-rendering logic was moved to
+a new `eye.py` file (`Eye` class). The refactoring is still work in progress.
+** `eyes.py` - has not been touched yet but the idea is to eventually convert it the same way as `cyclop.py` - to use `Eye` class.
+** `gfxutil.py` - no changes too
+** `graphics/` directory - the original graphics, no changes
 
-I am not uploading the patched `cyclop.py` yet - the code from the original project that was modified to copy image it draws to the OLED. I have a proof of concept version that
-works but it is too messy. The idea, however is quite simple there - you let it draw on its configured display, then use `pi3d.util.Screenshot.screenshot()` to grab a screenshot
-and send returned data `SSD1351.copy_image()` method. Then following `SSD1351.flush()` will put it into the display.
+If you want to run it - just run `cyclop.py` - it should render an eye into a small 128x128 window and at the same time copy the content to the OLED screen connected.
 
 ## How to connect
 At the moment, I am playing with just a single display which is connected the following way
@@ -54,6 +66,7 @@ data in really efficient `numpy.ndarray` instead (where the same operation is fa
 
 ## Links
 * [The project on Adafruit](https://learn.adafruit.com/animated-snake-eyes-bonnet-for-raspberry-pi?view=all)
+* [Original Adafruit Pi_Eyes sources](https://github.com/adafruit/Pi_Eyes/)
 * [Adafruit SSD1351 Python library](https://github.com/twchad/Adafruit_Python_SSD1351)
 * [Adafruit's board](https://www.adafruit.com/product/3356). I did not have it but it shows nice video how these eyes should operate
 * [SSD1351 datasheet](https://cdn-shop.adafruit.com/datasheets/SSD1351-Revision+1.3.pdf)
