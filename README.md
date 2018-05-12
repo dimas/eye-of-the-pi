@@ -1,6 +1,6 @@
 # Eye of the Pi
 
-This project started because I wanted to make [https://learn.adafruit.com/animated-snake-eyes-bonnet-for-raspberry-pi](this thing) I saw on Adafruit.
+This project started because I wanted to make [this thing](https://learn.adafruit.com/animated-snake-eyes-bonnet-for-raspberry-pi) I saw on Adafruit.
 
 The project described there works the following way - a Python application draws these eyes using OpenGL (pi3d) on your normal screen and then there is a C program (`fbx2`)
 that continuously copies image from the screen framebuffer to the displays connected over SPI.
