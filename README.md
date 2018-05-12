@@ -29,11 +29,11 @@ and another - to copy an image into the framebuffer.
 how many times per second it can flush the framebuffer (the fps).
 * `eye.py` - the Eye class with eye-rendering logic extracted from `cyclop.py`
 * Then there are files from the [Original Adafruit Pi_Eyes sources](https://github.com/adafruit/Pi_Eyes/):
-** `cyclop.py` - that has been refactored. The animation logic still remains the this file (although moved to `Animator` class) while eye-rendering logic was moved to
+  * `cyclop.py` - that has been refactored. The animation logic still remains the this file (although moved to `Animator` class) while eye-rendering logic was moved to
 a new `eye.py` file (`Eye` class). The refactoring is still work in progress.
-** `eyes.py` - has not been touched yet but the idea is to eventually convert it the same way as `cyclop.py` - to use `Eye` class.
-** `gfxutil.py` - no changes too
-** `graphics/` directory - the original graphics, no changes
+  * `eyes.py` - has not been touched yet but the idea is to eventually convert it the same way as `cyclop.py` - to use `Eye` class.
+  * `gfxutil.py` - no changes too
+  * `graphics/` directory - the original graphics, no changes
 
 If you want to run it - just run `cyclop.py` - it should render an eye into a small 128x128 window and at the same time copy the content to the OLED screen connected.
 
