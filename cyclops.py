@@ -191,7 +191,7 @@ class Animator:
 				startTime    = now
 				isMoving     = True
 
-        eye.set_pupil(curX, curY, p)
+        eye.set_pupil(curY, curX, p)
 
 	# Eyelid WIP
 

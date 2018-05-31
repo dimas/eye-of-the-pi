@@ -2,11 +2,12 @@ from xml.dom.minidom import parse
 from gfxutil import *
 
 class Eyelid:
-    def __init__(self, eyeRadius, lidMap, shader, lidOpenPts, lidClosedPts, lidEdgePts):
+    def __init__(self, eyeRadius, lidMap, shader, lidOpenPts, lidClosedPts, lidEdgePts, posX = 0, posY = 0, flip = False):
         self.prevWeight = 0
         self.lidOpenPts = lidOpenPts
         self.lidClosedPts = lidClosedPts
         self.lidEdgePts = lidEdgePts
+        self.flip = flip
         self.prevPts = pointsInterp(lidOpenPts, lidClosedPts, 0.5)
         self.regen = True
 
@@ -16,13 +17,14 @@ class Eyelid:
         self.eyelid.set_textures([lidMap])
         self.eyelid.set_shader(shader)
 
-        self.eyelid.positionX(0.0)
+        self.eyelid.positionX(posX)
+        self.eyelid.positionY(posY)
         self.eyelid.positionZ(-eyeRadius - 42)
 
         # Determine change in eyelid values needed to trigger geometry regen.
         # This is done a little differently than the pupils...instead of bounds,
         # the distance between the middle points of the open and closed eyelid
-        # paths is evaluated, then similar 1/2 pixel threshold is determined.
+        # paths is evaluated, then similar 1/4 pixel threshold is determined.
         self.lidRegenThreshold = 0.0
 
         p1 = lidOpenPts[len(lidOpenPts) / 2]
@@ -30,15 +32,15 @@ class Eyelid:
         dx = p2[0] - p1[0]
         dy = p2[1] - p1[1]
         d  = dx * dx + dy * dy
-        if d > 0: self.lidRegenThreshold = 0.5 / math.sqrt(d)
+        if d > 0: self.lidRegenThreshold = 0.25 / math.sqrt(d)
 
     def set_weight(self, weight):
 	if (self.regen or (abs(weight - self.prevWeight) >= self.lidRegenThreshold)):
             newLidPts = pointsInterp(self.lidOpenPts, self.lidClosedPts, weight)
             if weight > self.prevWeight:
-                mesh = pointsMesh(self.lidEdgePts, self.prevPts, newLidPts, 5, 0, False, True)
+                mesh = pointsMesh(self.lidEdgePts, self.prevPts, newLidPts, 5, 0, False, self.flip)
             else:
-                mesh = pointsMesh(self.lidEdgePts, newLidPts, self.prevPts, 5, 0, False, True)
+                mesh = pointsMesh(self.lidEdgePts, newLidPts, self.prevPts, 5, 0, False, self.flip)
 
             self.eyelid.re_init(pts = mesh)
 
@@ -52,7 +54,10 @@ class Eyelid:
         self.eyelid.draw()
 
 class Eye:
-    def __init__(self, eyeRadius):
+    def __init__(self, eyeRadius, posX = 0, posY = 0, flip = False):
+
+        # offset/rotation of iris and sclera. 180 degree difference for left and right eye just so they don't look identical
+        offset = 0 if flip else 0.5
 
         # Load SVG file, extract paths & convert to point lists --------------------
 
@@ -61,6 +66,8 @@ class Eye:
         # for how the WorldEye distorts things...looks OK on WorldEye now but might
         # seem small and silly if used with the regular OLED/TFT code.
         dom = parse("graphics/cyclops-eye.svg")
+#        dom = parse("graphics/eye.svg")
+
         self.pupilMinPts       = getPoints(dom, "pupilMin"      , 32, True , True )
         self.pupilMaxPts       = getPoints(dom, "pupilMax"      , 32, True , True )
         self.irisPts           = getPoints(dom, "iris"          , 32, True , True )
@@ -109,17 +116,17 @@ class Eye:
         maxDist = max(abs(a[0] - b[0]), abs(a[1] - b[1]), # Determine distance of max
                       abs(a[2] - b[2]), abs(a[3] - b[3])) # variance around each edge
         # maxDist is motion range in pixels as pupil scales between 0.0 and 1.0.
-        # 1.0 / maxDist is one pixel's worth of scale range.  Need 1/2 that...
-        if maxDist > 0: self.irisRegenThreshold = 0.5 / maxDist
+        # 1.0 / maxDist is one pixel's worth of scale range.  Need 1/4 that...
+        if maxDist > 0: self.irisRegenThreshold = 0.25 / maxDist
 
-        self.ulid = Eyelid(eyeRadius, lidMap, shader, self.upperLidOpenPts, self.upperLidClosedPts, self.upperLidEdgePts)
-        self.llid = Eyelid(eyeRadius, lidMap, shader, self.lowerLidOpenPts, self.lowerLidClosedPts, self.lowerLidEdgePts)
+        self.ulid = Eyelid(eyeRadius, lidMap, shader, self.upperLidOpenPts, self.upperLidClosedPts, self.upperLidEdgePts, posX, posY, flip)
+        self.llid = Eyelid(eyeRadius, lidMap, shader, self.lowerLidOpenPts, self.lowerLidClosedPts, self.lowerLidEdgePts, posX, posY, flip)
 
         self.prevPupilScale  = -1.0 # Force regen on first frame
 
         # Generate initial iris mesh; vertex elements will get replaced on
         # a per-frame basis in the main loop, this just sets up textures, etc.
-        self.iris = meshInit(32, 4, True, 0, 0.5/irisMap.iy, False)
+        self.iris = meshInit(32, 4, True, offset, 0.5/irisMap.iy, False)
         self.iris.set_textures([irisMap])
         self.iris.set_shader(shader)
         self.irisZ = zangle(self.irisPts, eyeRadius)[0] * 0.99 # Get iris Z depth, for later
@@ -136,10 +143,12 @@ class Eye:
         self.eyeball = pi3d.Lathe(path=pts, sides=64)
         self.eyeball.set_textures([scleraMap])
         self.eyeball.set_shader(shader)
-        reAxis(self.eyeball, 0.0)
+        reAxis(self.eyeball, offset)
 
-        self.eyeball.positionX(0.0)
-        self.iris.positionX(0.0)
+        self.eyeball.positionX(posX)
+        self.eyeball.positionY(posY)
+        self.iris.positionX(posX)
+        self.iris.positionY(posY)
 
 
     def draw(self):
