@@ -12,11 +12,12 @@ It was most interesting to me to play with the low-level display stuff (reading 
 like [Luma.OLED](https://luma-oled.readthedocs.io/en/latest/hardware.html)
 
 The Python code in [Original Adafruit Pi_Eyes sources](https://github.com/adafruit/Pi_Eyes/) I found difficult to follow and modify because
-it was a bit monolithic - everything was done in one huge `frame` method and there were lots of globals.
+it was a bit monolithic - everything was done in one huge `frame` method and there were lots of globals. And two-eyed version (`eyes.py`) was like 95% identical code.
 
 So I refactored it to be a bit more OOP-ish and introduced a clear separation between rendering code (the `Eye` class that draws the eye in a certain state using pi3d)
 and animation code (that controls eye state based on time or GPIO input).
-The hope is that two-eye version (when I start working on it) will also benefit a lot from that `Eye` class it as lots of copy&paste can be removed from `eyes.py`.
+
+Because the new version does not require `fbx2`, it does not have to be run under root.
 
 ## How to use
 It is still work in progress really...
@@ -27,12 +28,12 @@ and allows flushing the internal framebuffer to the OLED. It also has couple of 
 and another - to copy an image into the framebuffer.
 * `test.py` is just a very simple test to check the display and its driver work - it contiuously fills the display with red, then gren, then blue in a loop and prints
 how many times per second it can flush the framebuffer (the fps).
-* `eye.py` - the Eye class with eye-rendering logic extracted from `cyclop.py`
+* `eye.py` - the `Eye` class with eye-rendering logic extracted from `cyclop.py` and `eyes.py`
 * Then there are files from the [Original Adafruit Pi_Eyes sources](https://github.com/adafruit/Pi_Eyes/):
 ** `cyclop.py` - that has been refactored. The animation logic still remains the this file (although moved to `Animator` class) while eye-rendering logic was moved to
-a new `eye.py` file (`Eye` class). The refactoring is still work in progress.
-** `eyes.py` - has not been touched yet but the idea is to eventually convert it the same way as `cyclop.py` - to use `Eye` class.
-** `gfxutil.py` - no changes too
+a new `eye.py` file (`Eye` class). The refactoring is still work in progress. When run, it displays the animated eye on the screen and duplicates image to the OLED screen via `SSD1351` library above.
+** `eyes.py` - I only started working on it and converted to use `Eye` class. As it is still work in progress, when run, it just displays the animated eyes on the screen but does not try to duplicate image to OLED screens. Need to connect two first...
+** `gfxutil.py` - no changes, original code
 ** `graphics/` directory - the original graphics, no changes
 
 If you want to run it - just run `cyclop.py` - it should render an eye into a small 128x128 window and at the same time copy the content to the OLED screen connected.
