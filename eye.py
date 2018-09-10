@@ -35,7 +35,7 @@ class Eyelid:
         if d > 0: self.lidRegenThreshold = 0.25 / math.sqrt(d)
 
     def set_weight(self, weight):
-	if (self.regen or (abs(weight - self.prevWeight) >= self.lidRegenThreshold)):
+        if (self.regen or (abs(weight - self.prevWeight) >= self.lidRegenThreshold)):
             newLidPts = pointsInterp(self.lidOpenPts, self.lidClosedPts, weight)
             if weight > self.prevWeight:
                 mesh = pointsMesh(self.lidEdgePts, self.prevPts, newLidPts, 5, 0, False, self.flip)
@@ -47,7 +47,7 @@ class Eyelid:
             self.prevWeight = weight
             self.prevPts    = newLidPts
             self.regen = True
-	else:
+        else:
             self.regen = False
 
     def draw(self):
@@ -152,8 +152,8 @@ class Eye:
 
 
     def draw(self):
-	self.iris.draw()
-	self.eyeball.draw()
+        self.iris.draw()
+        self.eyeball.draw()
         self.ulid.draw()
         self.llid.draw()
 
@@ -168,11 +168,11 @@ class Eye:
             self.iris.re_init(pts=mesh)
             self.prevPupilScale = scale
 
-	self.iris.rotateToX(x)
-	self.iris.rotateToY(y)
+        self.iris.rotateToX(x)
+        self.iris.rotateToY(y)
 
-	self.eyeball.rotateToX(x)
-	self.eyeball.rotateToY(y)
+        self.eyeball.rotateToX(x)
+        self.eyeball.rotateToY(y)
 
     def set_upper_lid_weight(self, weight):
         self.ulid.set_weight(weight)
