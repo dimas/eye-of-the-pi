@@ -97,10 +97,10 @@ UNLOCK_CONFIG = 0xB1 # Command A2,B1,B3,BB,BE,C1 accessible if in unlock state
 
 class SSD1351:
 
-    def __init__(self):
+    def __init__(self, spi_bus = 1, spi_device = 0, dc = 24, rst = 25):
 
         self.spi = spidev.SpiDev()
-        self.spi.open(0, 0)
+        self.spi.open(spi_bus, spi_device)
         self.spi.max_speed_hz = 10000000
 
         self.width = 128
@@ -110,8 +110,8 @@ class SSD1351:
         self.frame = np.ndarray((self.width, self.height, 3), dtype=np.uint8)
 
         GPIO.setmode(GPIO.BCM)
-        self.dc = 24
-        self.rst = 25
+        self.dc = dc
+        self.rst = rst
 #        GPIO.setmode(GPIO.BOARD)
 #        self.dc = 16
 
@@ -231,7 +231,7 @@ class SSD1351:
         self.bulkdata([DEFAULT_CONTRAST_A, DEFAULT_CONTRAST_B, DEFAULT_CONTRAST_C])
 
         self.command(CMD_SET_REMAP)
-        self.data(COLOR_DEPTH_262K | ODD_EVEN_COM_SPLIT_ENABLED | SCAN_COM_DECR | COLOR_SEQ_CBA | MAP_SEG0_COL0 | ADDR_INCREMENT_HORIZONTAL)
+        self.data(COLOR_DEPTH_262K | ODD_EVEN_COM_SPLIT_ENABLED | SCAN_COM_INCR | COLOR_SEQ_CBA | MAP_SEG0_COL127 | ADDR_INCREMENT_HORIZONTAL)
 
         self.command(CMD_SET_DISPLAY_MODE_NORMAL)
 
@@ -267,8 +267,8 @@ class SSD1351:
         dstw = self.width
         dsth = self.height
 
-        srcw = img.shape[0]
-        srch = img.shape[1]
+        srcw = img.shape[1]
+        srch = img.shape[0]
 
         # If no width/height were given, assume we want to copy the entire image
         # Use source size for now, it will be later limited to destination if needed
@@ -315,6 +315,6 @@ class SSD1351:
 
         # print("(%d, %d) x (%d %d) => (%d, %d); src(%d, %d), dst(%d, %d)" % (srcx, srcy, w, h, dstx, dsty, srcw, srch, dstw, dsth))
 
-        self.frame[dstx:dstx+w, dsty:dsty+h] = img[srcx:srcx+w, srcy:srcy+h]
+        self.frame[dsty:dsty+h, dstx:dstx+w] = img[srcy:srcy+h, srcx:srcx+w]
 
 
