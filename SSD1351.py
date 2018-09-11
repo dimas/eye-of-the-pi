@@ -97,7 +97,7 @@ UNLOCK_CONFIG = 0xB1 # Command A2,B1,B3,BB,BE,C1 accessible if in unlock state
 
 class SSD1351:
 
-    def __init__(self, spi_bus = 1, spi_device = 0, dc = 24, rst = 25):
+    def __init__(self, spi_bus = 0, spi_device = 0, dc = 24, rst = 25):
 
         self.spi = spidev.SpiDev()
         self.spi.open(spi_bus, spi_device)
@@ -225,7 +225,7 @@ class SSD1351:
         self.data(0x08) # default
 
         self.command(CMD_SET_CONTRAST_MASTER)
-        self.data(DEFAULT_CONTRAST_MASTER/4) # temp, to keep it low
+        self.data(DEFAULT_CONTRAST_MASTER // 4) # temp, to keep it low
 
         self.command(CMD_SET_CONTRAST_ABC)
         self.bulkdata([DEFAULT_CONTRAST_A, DEFAULT_CONTRAST_B, DEFAULT_CONTRAST_C])

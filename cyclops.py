@@ -9,12 +9,18 @@
 import math
 import pi3d
 import random
-import thread
+#import thread
 import time
 import RPi.GPIO as GPIO
 
 import SSD1351
 import eye
+
+try:
+    import thread
+except ImportError:
+    import _thread as thread #Py3K changed it.
+
 
 # INPUT CONFIG for eye motion ----------------------------------------------
 # ANALOG INPUTS REQUIRE SNAKE EYES BONNET
@@ -128,13 +134,9 @@ blinkStartTime  = 0
 
 trackingPos = 0.3
 
-class Animator:
+frames = 0
 
-    def __init__(self):
-        self.frames = 0
-
-    def frame(self, p):
-
+def frame(p):
 	global startX, startY, destX, destY, curX, curY
 	global moveDuration, holdDuration, startTime, isMoving
 	global prevPupilScale
@@ -145,6 +147,7 @@ class Animator:
 	global blinkDuration
 	global blinkStartTime
 	global trackingPos
+	global frames
 
 	DISPLAY.loop_running()
 
@@ -152,7 +155,7 @@ class Animator:
 	dt  = now - startTime
 
 	if(now > beginningTime):
-		print(self.frames/(now-beginningTime))
+		print(frames/(now-beginningTime))
 
 	if JOYSTICK_X_IN >= 0 and JOYSTICK_Y_IN >= 0:
 		# Eye position from analog inputs
@@ -191,7 +194,7 @@ class Animator:
 				startTime    = now
 				isMoving     = True
 
-        eye.set_pupil(curY, curX, p)
+	eye.set_pupil(curY, curX, p)
 
 	# Eyelid WIP
 
@@ -246,24 +249,22 @@ class Animator:
 	newUpperLidWeight = trackingPos + (n * (1.0 - trackingPos))
 	newLowerLidWeight = (1.0 - trackingPos) + (n * trackingPos)
 
-        eye.set_upper_lid_weight(newUpperLidWeight)
-        eye.set_lower_lid_weight(newLowerLidWeight)
+	eye.set_upper_lid_weight(newUpperLidWeight)
+	eye.set_lower_lid_weight(newLowerLidWeight)
 
-        eye.draw()
+	eye.draw()
 
-        image = pi3d.util.Screenshot.screenshot()
-        oled.copy_image(image)
-        oled.flush()
+	image = pi3d.util.Screenshot.screenshot()
+	oled.copy_image(image)
+	oled.flush()
 
-	self.frames += 1
+	frames += 1
 
 	k = mykeys.read()
 	if k==27:
 		mykeys.close()
 		DISPLAY.stop()
 		exit(0)
-
-a = Animator()
 
 def split( # Recursive simulated pupil response when no analog sensor
   startValue, # Pupil scale starting value (0.0 to 1.0)
@@ -286,7 +287,7 @@ def split( # Recursive simulated pupil response when no analog sensor
 			v = startValue + dv * dt / duration
 			if   v < PUPIL_MIN: v = PUPIL_MIN
 			elif v > PUPIL_MAX: v = PUPIL_MAX
-			a.frame(v) # Draw frame w/interim pupil scale value
+			frame(v) # Draw frame w/interim pupil scale value
 
 
 # MAIN LOOP -- runs continuously -------------------------------------------
@@ -305,7 +306,7 @@ while True:
 		if PUPIL_SMOOTH > 0:
 			v = ((currentPupilScale * (PUPIL_SMOOTH - 1) + v) /
 			     PUPIL_SMOOTH)
-		a.frame(v)
+		frame(v)
 	else: # Fractal auto pupil scale
 		v = random.random()
 		split(currentPupilScale, v, 4.0, 1.0)

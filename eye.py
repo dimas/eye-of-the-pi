@@ -27,8 +27,8 @@ class Eyelid:
         # paths is evaluated, then similar 1/4 pixel threshold is determined.
         self.lidRegenThreshold = 0.0
 
-        p1 = lidOpenPts[len(lidOpenPts) / 2]
-        p2 = lidClosedPts[len(lidClosedPts) / 2]
+        p1 = lidOpenPts[len(lidOpenPts) // 2]
+        p2 = lidClosedPts[len(lidClosedPts) // 2]
         dx = p2[0] - p1[0]
         dy = p2[1] - p1[1]
         d  = dx * dx + dy * dy
