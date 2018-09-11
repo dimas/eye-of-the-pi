@@ -252,7 +252,7 @@ class Animator:
         eye.draw()
 
         image = pi3d.util.Screenshot.screenshot()
-        oled.copy_image(data)
+        oled.copy_image(image)
         oled.flush()
 
 	self.frames += 1
