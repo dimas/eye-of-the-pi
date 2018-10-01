@@ -1,6 +1,15 @@
 from xml.dom.minidom import parse
 from gfxutil import *
 
+# Represents the instant state of a single eye - pupil size, position
+# as well as weight for both upper and lower eyelids
+class EyeState:
+    pupilSize = 0
+    posX = 0
+    posY = 0
+    upperLidWeight = 0
+    lowerLidWeight = 0
+
 class Eyelid:
     def __init__(self, eyeRadius, lidMap, shader, lidOpenPts, lidClosedPts, lidEdgePts, posX = 0, posY = 0, flip = False):
         self.prevWeight = 0
@@ -179,3 +188,9 @@ class Eye:
 
     def set_lower_lid_weight(self, weight):
         self.llid.set_weight(weight)
+
+    # Set everything at once
+    def set_state(self, state):
+        self.ulid.set_weight(state.upperLidWeight)
+        self.llid.set_weight(state.lowerLidWeight)
+        self.set_pupil(state.posY, state.posX, state.pupilSize)

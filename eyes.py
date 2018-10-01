@@ -329,19 +329,6 @@ class BlinkState:
         self.startTime = now
         self.duration  = duration
 
-# Represents the instant state of a single eye - pupil size, position
-# as well as weight for both upper and lower eyelids
-class EyeState:
-    pupilSize = 0
-    posX = 0
-    posY = 0
-#    eyelidWeight = []
-    upperEyelidWeight = 0
-    lowerEyelidWeight = 0
-
-#    def __init__(self):
-#        self.eyelidWeight = [0] * num
-
 # Eyes model - provides instant state of the eyes to the rendering engine
 # as well as methods that allow manipulating that state to the animation/control code.
 # For example control code can request a certain eye to be closed and model will
@@ -441,18 +428,18 @@ class EyesModel:
 
         for i in range(num):
             n = self.get_eyelid_weight(now, i)
-            state = EyeState()
+            state = eye.EyeState()
             state.posX = posX
             state.posY = posY
             state.pupilSize = pupilSize
-            state.upperEyelidWeight = self.trackingPos + (n * (1.0 - self.trackingPos))
-            state.lowerEyelidWeight = (1.0 - self.trackingPos) + (n * self.trackingPos)
+            state.upperLidWeight = self.trackingPos + (n * (1.0 - self.trackingPos))
+            state.lowerLidWeight = (1.0 - self.trackingPos) + (n * self.trackingPos)
             result.append(state)
 
         return result
 
 
-# Specific implementation of TwoEyesModel - it just introduces convergence
+# Specific implementation of EyesModel - it just introduces convergence
 # assuming eyes will be drawn horisontally next one to another.
 # Left eye has index 0 while right eye has index 1.
 class TwoEyesModel(EyesModel):
@@ -474,19 +461,21 @@ class TwoEyesModel(EyesModel):
 
 eyePosInput = AutonomousEyePositionInput()
 pupilSizeInput = AutonomousPupilSizeInput()
-#eyesModel = EyesModel()
 eyesModel = TwoEyesModel()
 #eyePosInput = JoystickEyePositionInput(adcValue, JOYSTICK_X_IN, JOYSTICK_Y_IN)
 
-# Generate one frame of imagery
-
+# Renderer continuously draws eyes represented by the passed EyesModel in a loop.
+# The assumption is something uses methods of the EyesModel to manipulate its state
+# and/or model changes its state itself because of autoblink enabled.
+# Code interested in new frames should repeatedly call wait_image method which will return
+# a new image as soon as it becomes available.
 class Renderer:
 
-    def __init__(self, model):
+    def __init__(self, eyes, model):
+        self.eyes = eyes
         self.model = model
         self.image = None
         self.condition = threading.Condition()
-        self.trackingPos = 0.3
 
     def run(self):
         while True:
@@ -500,14 +489,10 @@ class Renderer:
         now = time.time()
 
         states = self.model.get_state(now)
-        eyes = [leftEye, rightEye]
 
         for i in range(2):
-          eye = eyes[i]
-          state = states[i]
-          eye.set_upper_lid_weight(state.upperEyelidWeight)
-          eye.set_lower_lid_weight(state.lowerEyelidWeight)
-          eye.set_pupil(state.posY, state.posX, state.pupilSize)
+          eye = self.eyes[i]
+          eye.set_state(states[i])
           eye.draw()
 
         img = pi3d.util.Screenshot.screenshot()
@@ -541,7 +526,7 @@ def oledThread(renderer, oled, srcx):
 
 # MAIN LOOP -- runs continuously -------------------------------------------
 
-renderer = Renderer(eyesModel)
+renderer = Renderer([leftEye, rightEye], eyesModel)
 
 thread.start_new_thread(oledThread, (renderer, leftOLED, DISPLAY.width // 2 - eyePosition - OLED_WIDTH // 2))
 thread.start_new_thread(oledThread, (renderer, rightOLED, DISPLAY.width // 2 + eyePosition - OLED_WIDTH // 2))
