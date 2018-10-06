@@ -43,14 +43,6 @@ BLINK_PIN       = -1
 WINK_R_PIN      = -1
 AUTOBLINK       = True  # If True, eyes blink autonomously
 
-OLED_WIDTH      = 128
-OLED_HEIGHT     = 128
-
-
-leftOLED = SSD1351.SSD1351(spi_bus = 0, spi_device = 0, dc = 24, rst = 25)
-rightOLED = SSD1351.SSD1351(spi_bus = 1, spi_device = 0, dc = 23, rst = 26)
-
-image = None
 
 # GPIO initialization ------------------------------------------------------
 
@@ -92,73 +84,7 @@ if adc:
 	thread.start_new_thread(adcThread, (adc, adcValue))
 
 
-# Set up display and initialize pi3d ---------------------------------------
-
-GAP = OLED_WIDTH // 2
-DISPLAY = pi3d.Display.create(samples = 4, w = 2*OLED_WIDTH + GAP, h = OLED_HEIGHT)
-# make background green while debugging and refactoring so it is easier to see individual eye pieces
-DISPLAY.set_background(0, 0.5, 0, 1) # r,g,b,alpha
-
-# eyeRadius is the size, in pixels, at which the whole eye will be rendered
-# onscreen.  eyePosition, also pixels, is the offset (left or right) from
-# the center point of the screen to the center of each eye.
-eyePosition = OLED_WIDTH // 2 + GAP // 2
-eyeRadius   = OLED_WIDTH / 2.1
-
-rightEye = eye.Eye(eyeRadius, -eyePosition, 0, True);
-leftEye = eye.Eye(eyeRadius, eyePosition, 0, False);
-
-# A 2D camera is used, mostly to allow for pixel-accurate eye placement,
-# but also because perspective isn't really helpful or needed here, and
-# also this allows eyelids to be handled somewhat easily as 2D planes.
-# Line of sight is down Z axis, allowing conventional X/Y cartesion
-# coords for 2D positions.
-cam    = pi3d.Camera(is_3d=False, at=(0,0,0), eye=(0,0,-1000))
-light  = pi3d.Light(lightpos=(0, -500, -500), lightamb=(0.2, 0.2, 0.2))
-
-# Initialize static geometry -----------------------------------------------
-
-# Init global stuff --------------------------------------------------------
-
-
-#mykeys = pi3d.Keyboard() # For capturing key presses
-
-#startX       = random.uniform(-30.0, 30.0)
-#n            = math.sqrt(900.0 - startX * startX)
-#startY       = random.uniform(-n, n)
-#destX        = startX
-#destY        = startY
-#curX         = startX
-#curY         = startY
-#moveDuration = random.uniform(0.075, 0.175)
-#holdDuration = random.uniform(0.1, 1.1)
-#startTime    = 0.0
-#isMoving     = False
-
-#frames        = 0
-#beginningTime = time.time()
-
-#currentPupilScale       =  0.5
-#prevPupilScale          = -1.0 # Force regen on first frame
-#prevLeftUpperLidWeight  = 0.5
-#prevLeftLowerLidWeight  = 0.5
-#prevRightUpperLidWeight = 0.5
-#prevRightLowerLidWeight = 0.5
-
-#timeOfLastBlink = 0.0
-#timeToNextBlink = 1.0
-# These are per-eye (left, right) to allow winking:
-#blinkStateLeft      = 0 # NOBLINK
-#blinkStateRight     = 0
-#blinkDurationLeft   = 0.1
-#blinkDurationRight  = 0.1
-#blinkStartTimeLeft  = 0
-#blinkStartTimeRight = 0
-
-#trackingPos = 0.3
-
 import threading
-#condition = threading.Condition()
 
 class EyePositionInput:
     def get_position(self, now):
@@ -439,16 +365,16 @@ class EyesModel:
         return result
 
 
-# Specific implementation of EyesModel - it just introduces convergence
-# assuming eyes will be drawn horisontally next one to another.
+# Specific implementation of EyesModel for two eyes - it just introduces convergence
+# assuming eyes will be drawn horisontally, one next to another.
 # Left eye has index 0 while right eye has index 1.
 class TwoEyesModel(EyesModel):
 
     def __init__(self):
-        super(TwoEyesModel, self).__init__(2)
+        EyesModel.__init__(self, 2)
 
     def get_state(self, now):
-        states = super(TwoEyesModel, self).get_state(now)
+        states = EyesModel.get_state(self, now)
 
         convergence = 2.0
 
@@ -464,27 +390,42 @@ pupilSizeInput = AutonomousPupilSizeInput()
 eyesModel = TwoEyesModel()
 #eyePosInput = JoystickEyePositionInput(adcValue, JOYSTICK_X_IN, JOYSTICK_Y_IN)
 
-# Renderer continuously draws eyes represented by the passed EyesModel in a loop.
-# The assumption is something uses methods of the EyesModel to manipulate its state
-# and/or model changes its state itself because of autoblink enabled.
+# Renderer continuously draws eyes represented by the passed EyesModel.
+# The assumption is model state is changing because something uses state-manipulation methods of the EyesModel
+# (and also because of autoblink enabled) so sequence of frames we are rendering shows the animation.
 # Code interested in new frames should repeatedly call wait_image method which will return
 # a new image as soon as it becomes available.
+#
+# Note that originally I plannned to implement rendering in a background thread so Renderer would have start/stop
+# methods for Renderer that allows controlling but alas:
+#   load_opengl must be called on main thread for <pi3d.Buffer.Buffer object at 0x74d72250>
+#   ...
+#   AttributeError: 'Buffer' object has no attribute 'vbuf'
+# so I am going to just call run() from the main thread. Still start/stop methods are provided
+# to allow control thread to pause and resume rendering when needed.
 class Renderer:
 
-    def __init__(self, eyes, model):
+    def __init__(self, display, eyes, model):
         self.eyes = eyes
         self.model = model
         self.image = None
         self.condition = threading.Condition()
+        self.started = False
+        self.display = display
 
+    # Has to be called from the main thread
     def run(self):
         while True:
-            self.frame()
+            # Wait until something calls start()
+            with self.condition:
+                while not self.started:
+                    self.condition.wait()
 
-    def frame(self):
-        global leftEye, rightEye
+            self.render_frame()
 
-        DISPLAY.loop_running()
+
+    def render_frame(self):
+        self.display.loop_running()
 
         now = time.time()
 
@@ -502,12 +443,21 @@ class Renderer:
             self.image = img
             self.condition.notifyAll()
 
-    # Wait until next image is rendered and return it
+    # Wait until next frame is rendered and return it
     def wait_image(self, last_image):
         with self.condition:
             while self.image is last_image:
                 self.condition.wait()
             return self.image
+
+    def start(self):
+        with self.condition:
+            self.started = True
+            self.condition.notifyAll()
+
+    def stop(self):
+        with self.condition:
+            self.started = False
 
 
 def oledThread(renderer, oled, srcx):
@@ -524,11 +474,46 @@ def oledThread(renderer, oled, srcx):
 #        print("%s : copy_image=%d, flush=%d" % (threading.current_thread(), (t2-t1)*1000, (t3-t2)*1000))
         print("%s : wait_image=%d, copy_image=%d, flush=%d" % ("x", (t1-t0)*1000, (t2-t1)*1000, (t3-t2)*1000))
 
-# MAIN LOOP -- runs continuously -------------------------------------------
 
-renderer = Renderer([leftEye, rightEye], eyesModel)
+# MAIN
 
-thread.start_new_thread(oledThread, (renderer, leftOLED, DISPLAY.width // 2 - eyePosition - OLED_WIDTH // 2))
-thread.start_new_thread(oledThread, (renderer, rightOLED, DISPLAY.width // 2 + eyePosition - OLED_WIDTH // 2))
+OLED_WIDTH      = 128
+OLED_HEIGHT     = 128
+GAP             = OLED_WIDTH // 2
 
+leftOLED = SSD1351.SSD1351(spi_bus = 0, spi_device = 0, dc = 24, rst = 25)
+rightOLED = SSD1351.SSD1351(spi_bus = 1, spi_device = 0, dc = 23, rst = 26)
+
+displayWidth = 2 * OLED_WIDTH + GAP
+displayHeight = OLED_HEIGHT
+
+# Display must be created before the eyes or their draw() method throws...
+display = pi3d.Display.create(samples = 4, w = displayWidth, h = displayHeight)
+# make background green while debugging and refactoring so it is easier to see individual eye pieces
+display.set_background(0, 0.5, 0, 1) # r,g,b,alpha
+# A 2D camera is used, mostly to allow for pixel-accurate eye placement,
+# but also because perspective isn't really helpful or needed here, and
+# also this allows eyelids to be handled somewhat easily as 2D planes.
+# Line of sight is down Z axis, allowing conventional X/Y cartesion
+# coords for 2D positions.
+cam    = pi3d.Camera(is_3d=False, at=(0,0,0), eye=(0,0,-1000))
+light  = pi3d.Light(lightpos=(0, -500, -500), lightamb=(0.2, 0.2, 0.2))
+
+# eyeRadius is the size, in pixels, at which the whole eye will be rendered
+# onscreen.  eyePosition, also pixels, is the offset (left or right) from
+# the center point of the screen to the center of each eye.
+eyePosition = OLED_WIDTH // 2 + GAP // 2
+eyeRadius   = OLED_WIDTH / 2.1
+
+rightEye = eye.Eye(eyeRadius, -eyePosition, 0, True);
+leftEye = eye.Eye(eyeRadius, eyePosition, 0, False);
+
+renderer = Renderer(display, [leftEye, rightEye], eyesModel)
+
+thread.start_new_thread(oledThread, (renderer, leftOLED, displayWidth // 2 - eyePosition - OLED_WIDTH // 2))
+thread.start_new_thread(oledThread, (renderer, rightOLED, displayWidth // 2 + eyePosition - OLED_WIDTH // 2))
+
+renderer.start()
 renderer.run()
+
+time.sleep(60)
