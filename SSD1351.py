@@ -95,19 +95,25 @@ LOCK_MCU      = 0x16 # Lock OLED driver IC MCU interface from entering command
 LOCK_CONFIG   = 0xB0 # Command A2,B1,B3,BB,BE,C1 inaccessible in both lock and unlock state 
 UNLOCK_CONFIG = 0xB1 # Command A2,B1,B3,BB,BE,C1 accessible if in unlock state  
 
+
+# Just a high and low GPIO bit value for readability
+HIGH = 1
+LOW  = 0
+
 class SSD1351:
 
     def __init__(self, spi_bus = 0, spi_device = 0, dc = 24, rst = 25):
 
         self.spi = spidev.SpiDev()
         self.spi.open(spi_bus, spi_device)
-        self.spi.max_speed_hz = 10000000
+        self.spi.max_speed_hz = 12000000
 
         self.width = 128
         self.height = 128
 
-        # RGB buffer ([x, y, component])
-        self.frame = np.ndarray((self.width, self.height, 3), dtype=np.uint8)
+        # RGB buffer ([y, x, component])
+        self.frame = np.ndarray((self.height, self.width, 3), dtype=np.uint8)
+        self.frame[:,:,:] = 0
 
         GPIO.setmode(GPIO.BCM)
         self.dc = dc
@@ -115,62 +121,94 @@ class SSD1351:
 #        GPIO.setmode(GPIO.BOARD)
 #        self.dc = 16
 
+        # Check if py-spidev supports xfer3 call
+        # https://github.com/doceme/py-spidev/pull/75
+        self.has_xfer3 = hasattr(self.spi, "xfer3")
+
         GPIO.setup(self.dc, GPIO.OUT)
         GPIO.setup(self.rst, GPIO.OUT)
 
         self.reset()
         self.configure()
 
-    def set_dc(self, state):
-        GPIO.output(self.dc, 1 if state else 0)
+    def set_dc(self, value):
+        GPIO.output(self.dc, value)
 
-    def set_rst(self, state):
-        GPIO.output(self.rst, 1 if state else 0)
+    def set_rst(self, value):
+        GPIO.output(self.rst, value)
 
     def command(self, c):
-        self.set_dc(False)
-        self.spi.xfer([c])
+        self.set_dc(LOW)
+        self.xfer_list([c])
 
     def data(self, c):
-        self.set_dc(True)
-        self.spi.xfer([c])
-
-    def get_spi_bufsize(self):
-        # There is /sys/module/spidev/parameters/bufsiz which you can increase to allow bigger chunks
-        # so I wanter to read it here and use buffer of that size.
-        # But spidev library does not support anything but 4K really
-        # See https://github.com/doceme/py-spidev/issues/62
-        return 4096
+        self.set_dc(HIGH)
+        self.xfer_list([c])
 
     # data must be a list
     def bulkdata(self, data):
-        self.set_dc(True)
-        chunk_size = self.get_spi_bufsize()
+        self.set_dc(HIGH)
+        self.xfer_list(data)
+
+    # data must be a list
+    def xfer_list(self, data):
+        if self.has_xfer3:
+            self.xfer3_list(data)
+        else:
+            self.xfer2_list(data)
+
+    # xfer3 in py-spidev can accept block of any size and does slicing internaly
+    # But py-spidev must be compiled with the patch - https://github.com/doceme/py-spidev/issues/62
+    # So this method should only be called when xfer3 support is established
+    def xfer3_list(self, data):
+        self.spi.xfer3(data)
+
+    # xfer2 in py-spidev only supports maxumum size of 4096 bytes unless you patch and recompile it
+    # So slice our data and send it in chunks
+    def xfer2_list(self, data):
+        chunk_size = 4096
         for i in range(0, len(data), chunk_size):
             chunk = data[i:i + chunk_size]
-            self.spi.xfer(chunk)
+            self.spi.xfer2(chunk)
 
-    # data must be a numpy.ndarray (we call tolist() for each chunk)
+    # data must be a numpy.ndarray
     def data_ndarray(self, data):
-        self.set_dc(True)
-        chunk_size = self.get_spi_bufsize()
-        # It is slightly more efficient to slice numpy array into chunks and then call tolist() on each
-        # instead of converting the entire array tolist() and then cutting the list into chunks.
-        # Either way, the tolist() thing is very expensive really. Would be better if numpy.array
-        # implemented sequence protocol which spidev.xfer expects
-        # But alas, https://github.com/numpy/numpy/issues/7315
+        self.set_dc(HIGH)
+        if self.has_xfer3:
+            self.xfer3_ndarray(data)
+        else:
+            self.xfer2_ndarray(data)
+
+    # data must be a numpy.ndarray
+    # Note:
+    # it is quite easy to modify py-spidef so it can accept numpy.ndarray without
+    # the need of converting it to Python list - because numpy.uint8 is not PyLong, it does not pass PyLong_Check()
+    # but still can be handled with PyLong_AsLong(), you just need to check result for -1
+    # and verify if there was an error with PyErr_Occurred() in that case.
+    # However while removing conversion, it makes it about 50% slower!
+    # Which means numpy's bulk data type conversion performed by tolist() is much better optimised.
+    def xfer3_ndarray(self, data):
+        self.xfer3_list(data.tolist())
+
+    # xfer2 in py-spidev only supports maxumum size of 4096 bytes unless you patch and recompile it
+    # So slice our data and send it in chunkks.
+    # The reason for keeping this method instead of just delegating to xfer2_list which does similar slicing is
+    # that it is slightly more efficient to slice numpy array into chunks and then call tolist() on each
+    # compered to converting the entire array tolist() and then slicing that list into chunks.
+    def xfer2_ndarray(self, data):
+        chunk_size = 4096
         for i in range(0, len(data), chunk_size):
-            chunk = data[i:i + chunk_size].tolist()
-            self.spi.xfer(chunk)
+            chunk = data[i:i + chunk_size]
+            self.spi.xfer2(chunk.tolist())
 
     def reset(self):
         # Pull RST# low for 1 millisecond.
         # Datasheet only really asks for 2 nanos (see 8.9 - Power ON and OFF sequence)
-        self.set_rst(False)
+        self.set_rst(LOW)
         time.sleep(0.001)
 
         # Set RST# back high
-        self.set_rst(True)
+        self.set_rst(HIGH)
 
     def configure(self):
 
@@ -249,6 +287,19 @@ class SSD1351:
 
     # Flush framebuffer to the device
     def flush(self):
+
+        # Reset address pointers, On my Raspberry Pi 3 while spi0 works just fine, there is something with spi1
+        # so it looks like sometimes some bytes get lost causing the remaining of the image be shifted accordingly
+        # This is especially true at hight speeds and with large block sizes but still the issue only plagues spi1
+        # and not spi0. I cannot stop that from happening (I do not even know for sure what is going on) so
+        # the workaround is to always reinitialise address pointers before sending next frame. This does not stop
+        # random frames from being corrupted but at least next one will be redrawn in full instead of continuing
+        # from the current address pointer and leaving the frame permanently damaged.
+        self.command(CMD_SET_ROW_ADDRESS)
+        self.bulkdata([0, 127]) # start, end
+        self.command(CMD_SET_COL_ADDRESS)
+        self.bulkdata([0, 127]) # start, end
+
         raw = self.frame.flatten() >> 2
         self.command(CMD_WRITE_RAM)
         self.data_ndarray(raw)
