@@ -118,12 +118,10 @@ class SSD1351:
         GPIO.setmode(GPIO.BCM)
         self.dc = dc
         self.rst = rst
-#        GPIO.setmode(GPIO.BOARD)
-#        self.dc = 16
 
-        # Check if py-spidev supports xfer3 call
-        # https://github.com/doceme/py-spidev/pull/75
-        self.has_xfer3 = hasattr(self.spi, "xfer3")
+        # Check if py-spidev supports writebytes2 call
+        # https://github.com/doceme/py-spidev/pull/77
+        self.has_writebytes2 = hasattr(self.spi, "writebytes2")
 
         GPIO.setup(self.dc, GPIO.OUT)
         GPIO.setup(self.rst, GPIO.OUT)
@@ -139,67 +137,58 @@ class SSD1351:
 
     def command(self, c):
         self.set_dc(LOW)
-        self.xfer_list([c])
+        self.write_list([c])
 
     def data(self, c):
         self.set_dc(HIGH)
-        self.xfer_list([c])
+        self.write_list([c])
 
     # data must be a list
     def bulkdata(self, data):
         self.set_dc(HIGH)
-        self.xfer_list(data)
+        self.write_list(data)
 
     # data must be a list
-    def xfer_list(self, data):
-        if self.has_xfer3:
-            self.xfer3_list(data)
+    def write_list(self, data):
+        if self.has_writebytes2:
+            # writebytes2 in py-spidev can accept block of any size and does slicing internaly
+            # But py-spidev must be compiled with the patch - https://github.com/doceme/py-spidev/pull/77
+            # So this method should only be called when writebytes2 support is established
+            self.spi.writebytes2(data)
         else:
-            self.xfer2_list(data)
+            # No support for writebytes2. Use xfer2 rather than writebytes even though we are not interested
+            # in reading the response back. This is because xfer2 seems to release GIL during actual IO.
+            # xfer2 in py-spidev only supports maxumum size of 4096 bytes unless you patch and recompile it
+            # So slice our data and send it in chunks
+            chunk_size = 4096
+            for i in range(0, len(data), chunk_size):
+                chunk = data[i:i + chunk_size]
+                self.spi.xfer2(chunk)
 
-    # xfer3 in py-spidev can accept block of any size and does slicing internaly
-    # But py-spidev must be compiled with the patch - https://github.com/doceme/py-spidev/issues/62
-    # So this method should only be called when xfer3 support is established
-    def xfer3_list(self, data):
-        self.spi.xfer3(data)
-
-    # xfer2 in py-spidev only supports maxumum size of 4096 bytes unless you patch and recompile it
-    # So slice our data and send it in chunks
-    def xfer2_list(self, data):
-        chunk_size = 4096
-        for i in range(0, len(data), chunk_size):
-            chunk = data[i:i + chunk_size]
-            self.spi.xfer2(chunk)
+    # data must be a numpy.ndarray
+    def write_ndarray(self, data):
+        if self.has_writebytes2:
+            # writebytes2 in py-spidev accepts ndarray without any conversion
+            # But py-spidev must be compiled with the patch - https://github.com/doceme/py-spidev/pull/77
+            # So this method should only be called when writebytes2 support is established
+            self.spi.writebytes2(data)
+        else:
+            # No support for writebytes2. Use xfer2 rather than writebytes even though we are not interested
+            # in reading the response back. This is because xfer2 seems to release GIL during actual IO.
+            # xfer2 in py-spidev only supports maxumum size of 4096 bytes unless you patch and recompile it
+            # So slice our data and send it in chunkks.
+            # The reason for keeping this method instead of just delegating to xfer2_list which does similar slicing is
+            # that it is slightly more efficient to slice numpy array into chunks and then call tolist() on each
+            # compered to converting the entire array tolist() and then slicing that list into chunks.
+            chunk_size = 4096
+            for i in range(0, len(data), chunk_size):
+                chunk = data[i:i + chunk_size]
+                self.spi.xfer2(chunk.tolist())
 
     # data must be a numpy.ndarray
     def data_ndarray(self, data):
         self.set_dc(HIGH)
-        if self.has_xfer3:
-            self.xfer3_ndarray(data)
-        else:
-            self.xfer2_ndarray(data)
-
-    # data must be a numpy.ndarray
-    # Note:
-    # it is quite easy to modify py-spidef so it can accept numpy.ndarray without
-    # the need of converting it to Python list - because numpy.uint8 is not PyLong, it does not pass PyLong_Check()
-    # but still can be handled with PyLong_AsLong(), you just need to check result for -1
-    # and verify if there was an error with PyErr_Occurred() in that case.
-    # However while removing conversion, it makes it about 50% slower!
-    # Which means numpy's bulk data type conversion performed by tolist() is much better optimised.
-    def xfer3_ndarray(self, data):
-        self.xfer3_list(data.tolist())
-
-    # xfer2 in py-spidev only supports maxumum size of 4096 bytes unless you patch and recompile it
-    # So slice our data and send it in chunkks.
-    # The reason for keeping this method instead of just delegating to xfer2_list which does similar slicing is
-    # that it is slightly more efficient to slice numpy array into chunks and then call tolist() on each
-    # compered to converting the entire array tolist() and then slicing that list into chunks.
-    def xfer2_ndarray(self, data):
-        chunk_size = 4096
-        for i in range(0, len(data), chunk_size):
-            chunk = data[i:i + chunk_size]
-            self.spi.xfer2(chunk.tolist())
+        self.write_ndarray(data)
 
     def reset(self):
         # Pull RST# low for 1 millisecond.
@@ -269,7 +258,7 @@ class SSD1351:
         self.bulkdata([DEFAULT_CONTRAST_A, DEFAULT_CONTRAST_B, DEFAULT_CONTRAST_C])
 
         self.command(CMD_SET_REMAP)
-        self.data(COLOR_DEPTH_262K | ODD_EVEN_COM_SPLIT_ENABLED | SCAN_COM_INCR | COLOR_SEQ_CBA | MAP_SEG0_COL127 | ADDR_INCREMENT_HORIZONTAL)
+        self.data(COLOR_DEPTH_262K | ODD_EVEN_COM_SPLIT_ENABLED | SCAN_COM_DECR | COLOR_SEQ_CBA | MAP_SEG0_COL127 | ADDR_INCREMENT_HORIZONTAL)
 
         self.command(CMD_SET_DISPLAY_MODE_NORMAL)
 
