@@ -94,8 +94,9 @@ It seems that with Python 2 `py-spidev` gets into a GIL (global interpreter lock
 Because of that there is no benefit from running independend threads for each screen, operations gets performed sequentially and the frame rate suffers.
 
 Also, the standard `py-spidev` library used to communicate with SPI devices only support 4K buffer. Which is not optimal as each 128x128 frame for OLED takes about 48K,
-it has to be sliced into small chunks. For optimal performance you need to:
-1. install `py-spidev` version that supports `xfer3` method - see https://github.com/doceme/py-spidev/pull/75
+it has to be sliced into small chunks. And more importantly, there is a huge overhead needed to convert `nummpy.array` to list that is accepted by `py-spidev`.
+For optimal performance you need to:
+1. install `py-spidev` version that supports `writebytes2` method - see https://github.com/doceme/py-spidev/pull/77
 2. then make sure your kernel is configured with large blocks
 
 You can check the current block size with:
